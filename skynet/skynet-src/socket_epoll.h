@@ -42,17 +42,33 @@ sp_del(poll_fd fd, int sock) {
 
 static void
 sp_write(poll_fd, int sock, void *ud, bool enable) {
-
+    struct epoll_event ev;
+    ev.events = EPOLLIN | (enable ? EPOLLOUT : 0);
+    ev.data.ptr = ud;
+    epoll_ctl(efd, EPOLL_CTL_MOD, sock, &ev);
 }
 
 static int
 sp_wait(poll_fd, struct event *e, int max) {
-
+    struct epoll_event ev[max];
+    int n = epoll_wait(efd, ev, max, -1);
+    int i;
+    for (i = 0; i < n; i++) {
+        unsigned flag = ev[i].events;
+        e[i].s     = ev[i].data.ptr;
+        e[i].write = (flag & EPOLLOUT) != 0;
+        e[i].read  = (flag & EPOLLIN | EPOLLHUP) != 0;
+        e[i].error = (flag & EPOLLERR) != 0;
+    }
+    return n;
 }
 
 static void
-sp_nonblocking(int sock) {
-
+sp_nonblocking(int fd) {
+    int flag = fcntl(fd, F_GETEL, 0);
+    if (-1 != flag) {
+        fcntl(fd, F_SETFL, flag | O_NONBLOCK);
+    }
 }
 
 #endif
